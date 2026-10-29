@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= calendar.type === 'central' ? 'Central Academic Calendar' : calendar.shortName + ' Event Calendar' %> · <%= instituteName %></title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/html2canvas.min.js"></script>
+</head>
+<body>
+<%
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const monthNamesShort = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dows = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const roleLabel = { super_admin: 'Super admin', central_admin: 'Central admin', dept_admin: 'Department admin' };
+  const tone = (e) => e.calendarType === 'central' ? 'central' : 'dept';
+  const q = (o) => '?' + Object.entries(Object.assign({ year: year, month: month, category: category, central: includeCentral ? 1 : '' }, o))
+    .filter(function (kv) { return kv[1] !== '' && kv[1] !== null && kv[1] !== undefined && kv[1] !== 'all' || kv[0] === 'category' && kv[1] === 'all'; })
+    .map(function (kv) { return encodeURIComponent(kv[0]) + '=' + encodeURIComponent(kv[1]); }).join('&');
+  function fmtShort(dateStr){ const p = dateStr.split('-').map(Number); return monthNamesShort[p[1]-1] + ' ' + p[2]; }
+  function fmtLong(dateStr){ const p = dateStr.split('-').map(Number); return new Date(p[0], p[1]-1, p[2]).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }); }
+%>
+
+<header class="masthead">
+  <div class="brand">
+    <div class="crest">
+      <img src="/logo.jpg" alt="VIT Logo">
+    </div>
+    <div>
+      <h1><%= calendar.titleLine %></h1>
+      <% if (calendar.subLine) { %><div class="dept"><%= calendar.subLine %></div><% } %>
+    </div>
+  </div>
+  <div class="actions">
+    <% if (showChangeDepartment) { %>
+      <a class="btn btn-outline-light" href="/">Change department</a>
+    <% } %>
+    <% if (user) { %>
+      <div class="admin-badge"><span class="dot"></span>Signed in as <%= user.username %> <span class="admin-role">· <%= roleLabel[user.role] %></span></div>
+      <% if (canEdit) { %><button class="btn btn-outline-light" id="importBtn">Import Events</button><% } %>
+      <button class="btn btn-outline-light" id="logoutBtn">Log out</button>
+    <% } else { %>
+      <button class="btn btn-gold" id="loginBtn">Staff log in</button>
+    <% } %>
+  </div>
+</header>
+<% if (flash) { %><div class="flash"><%= flash %></div><% } %>
+
+<div class="wrap">
+  <div class="layout">
+
+    <div class="card">
+      <% if (locked) { %>
+        <div class="locked-note">🔒 Please log in with your department account to view this calendar.</div>
+      <% } %>
+      <div class="cal-head">
+        <div class="cal-title"><%= monthNames[month - 1] %> <span class="year"><%= year %></span></div>
+        <div class="nav">
+          <a href="<%= calendar.base %><%= q({ year: prevYear, month: prevMonth }) %>">‹</a>
+          <a href="<%= calendar.base %><%= q({ year: nextYear, month: nextMonth }) %>">›</a>
+        </div>
+      </div>
+
+      <% if (canIncludeCentral) { %>
+        <label class="central-toggle">
+          <input type="checkbox" id="centralToggle" <%= includeCentral ? 'checked' : '' %>>
+          Also show Central events (read-only)
+        </label>
+      <% } %>
+
+      <div class="filters">
+        <a class="chip <%= category === 'all' ? 'active' : '' %>" href="<%= calendar.base %><%= q({ category: 'all', date: selectedDate || '' }) %>">All</a>
+        <% filterCategories.forEach(function(cat) { %>
+          <a class="chip <%= category === String(cat.id) ? 'active' : '' %> <%= cat.fromCentral ? 'central-chip' : '' %>"
+             href="<%= calendar.base %><%= q({ category: cat.id, date: selectedDate || '' }) %>">
+            <i class="swatch" style="background:<%= cat.color %>"></i><%= cat.name %><%= cat.fromCentral ? ' (Central)' : '' %><%= cat.isActive ? '' : ' (inactive)' %>
+          </a>
+        <% }); %>
+      </div>
+
+      <div class="grid">
+        <% dows.forEach(function(d) { %><div class="dow"><%= d %></div><% }); %>
+      </div>
+      <div class="grid" style="margin-top:6px;">
+        <% cells.forEach(function(cell) { %>
+          <% if (cell.empty) { %>
+            <div class="cell empty"></div>
+          <% } else {
+            const dayEvents = cell.events;
+            const shown = categoryId === null ? dayEvents : dayEvents.filter(e => e.categoryId === categoryId);
+            const hasAny = dayEvents.length > 0;
+            const dimmed = hasAny && categoryId !== null && shown.length === 0 ? 'dimmed' : '';
+            const isSelected = selectedDate === cell.date ? 'selected' : '';
+            const isToday = today === cell.date ? 'today' : '';
+            const maxTags = 2;
+          %>
+            <div class="cell has-day <%= dimmed %> <%= isSelected %> <%= isToday %>">
+              <a class="cell-link" href="<%= calendar.base %><%= q({ date: cell.date }) %>" aria-label="View <%= cell.date %>"></a>
+              <% if (canEdit) { %>
+                <button class="quick-add" type="button" data-date="<%= cell.date %>" title="Add event on this date">+</button>
+              <% } %>
+              <span class="daynum"><%= cell.day %></span>
+              <% shown.slice(0, maxTags).forEach(function(e) { %>
+                <div class="evt-tag <%= tone(e) %>" title="<%= e.title %> — <%= e.categoryName %>"><i class="swatch" style="background:<%= e.categoryColor %>"></i><span class="evt-tag-text"><%= e.title %></span></div>
+              <% }); %>
+              <% if (shown.length > maxTags) { %>
+                <div class="evt-more">+<%= shown.length - maxTags %> more</div>
+              <% } %>
+            </div>
+          <% } %>
+        <% }); %>
+      </div>
+
+      <div class="legend">
+        <span><i class="sw central"></i> Central events (blue)</span>
+        <span><i class="sw dept"></i> Department events (teal)</span>
+        <span><i class="sw ring"></i> Today</span>
+        <span><i class="sw" style="background:var(--gold-soft);border:1.5px solid var(--gold);"></i> Selected</span>
+      </div>
+    </div>
+
+    <div class="right-col">
+    <div class="panel card">
+      <div class="eyebrow">Event details</div>
+
+      <% if (!selectedDate) { %>
+        <div class="empty-state">
+          <h3>No date selected</h3>
+          <p>Click any date with events to view details here. Here's what's coming up:</p>
+        </div>
+        <div class="upcoming-list">
+          <% if (upcoming.length === 0) { %>
+            <div style="font-size:13px;color:var(--ink-soft);padding:10px 0;">No events yet.</div>
+          <% } %>
+          <% upcoming.forEach(function(e) { %>
+            <a class="upcoming-item <%= tone(e) %>" href="<%= calendar.base %>?year=<%= e.date.slice(0,4) %>&month=<%= Number(e.date.slice(5,7)) %>&category=all&date=<%= e.date %><%= includeCentral ? '&central=1' : '' %>">
+              <i class="swatch" style="background:<%= e.categoryColor %>"></i>
+              <span class="d"><%= fmtShort(e.date) %></span>
+              <span><%= e.title %></span>
+            </a>
+          <% }); %>
+        </div>
+        <% if (canEdit) { %>
+          <div class="admin-actions"><button class="btn btn-navy btn-block" id="panelAddBtn">+ Add event</button></div>
+        <% } else if (!user) { %>
+          <div class="lock-note">🔒 Log in with your department account to add or edit events</div>
+        <% } %>
+
+      <% } else if (selectedEvents.length === 0) { %>
+        <div class="empty-state">
+          <h3><%= fmtLong(selectedDate) %></h3>
+          <p>Nothing scheduled on this date.</p>
+        </div>
+        <% if (canEdit) { %>
+          <div class="admin-actions"><button class="btn btn-navy btn-block" id="panelAddBtn" data-date="<%= selectedDate %>">+ Add event</button></div>
+        <% } else if (!user) { %>
+          <div class="lock-note">🔒 Log in with your department account to add or edit events</div>
+        <% } %>
+
+      <% } else { %>
+        <% selectedEvents.forEach(function(e, idx) {
+             const mayEdit = canEdit && e.calendarType === calendar.type && (e.departmentId || null) === (calendar.departmentId || null);
+        %>
+          <% if (idx > 0) { %><hr class="div"><% } %>
+          <div class="evt-block <%= tone(e) %>">
+            <div class="evt-cat-badge" style="background:color-mix(in srgb, <%= e.categoryColor %> 16%, white);color:<%= e.categoryColor %>">
+              <i class="swatch" style="background:<%= e.categoryColor %>"></i><%= e.categoryName %>
+            </div><span class="type-chip <%= tone(e) %>"><%= e.calendarType === 'central' ? 'Central' : 'Department' %></span>
+            <div class="meta-row"><span class="ico">&#127970;</span><span><%= e.calendarType === 'central' ? 'Central Academic Calendar' : e.departmentName %></span></div>
+            <h3 class="evt-title"><%= e.title %></h3>
+            <div class="meta-row"><span class="ico">&#9201;</span><span><%= e.time || 'Time not set' %></span></div>
+            <div class="meta-row"><span class="ico">&#128205;</span><span><%= e.venue || 'Venue not set' %></span></div>
+            <% if (e.schedule) { %><div class="meta-row"><span class="ico">&#128197;</span><span><%= e.schedule %></span></div><% } %>
+            <% if (e.guestName) { %><div class="meta-row"><span class="ico">&#128100;</span><span>Guest: <%= e.guestName %></span></div><% } %>
+            <% if (e.meetingAgenda) { %><div class="evt-desc"><strong>Meeting Details/Agenda:</strong> <%= e.meetingAgenda %></div><% } %>
+            <% if (e.description) { %><div class="evt-desc"><%= e.description %></div><% } %>
+            <% if (e.additionalDetails) { %><div class="evt-desc"><strong>Additional details:</strong> <%= e.additionalDetails %></div><% } %>
+          </div>
+          <hr class="div">
+          <label class="reminder-row">
+            <input type="checkbox" class="rem-checkbox" data-event-id="<%= e.id %>">
+            Email me a reminder
+          </label>
+          <div class="reminder-email" id="rem-email-<%= e.id %>">
+            <input type="email" id="rem-input-<%= e.id %>" placeholder="you@vit.edu.in">
+            <button class="btn btn-navy" data-send-reminder="<%= e.id %>">Save</button>
+          </div>
+          <div class="reminder-confirm" id="rem-confirm-<%= e.id %>">✓ We'll email a reminder before this event.</div>
+
+          <% if (mayEdit) { %>
+            <div class="admin-actions">
+              <button class="btn btn-line" data-edit-event="<%= JSON.stringify(e) %>">Edit</button>
+              <button class="btn btn-danger" data-delete-event="<%= e.id %>">Delete</button>
+            </div>
+          <% } %>
+        <% }); %>
+
+        <% if (canEdit) { %>
+          <div class="admin-actions" style="margin-top:18px;">
+            <button class="btn btn-navy btn-block" id="panelAddBtn" data-date="<%= selectedDate %>">+ Add another event</button>
+          </div>
+        <% } else if (!user) { %>
+          <div class="lock-note">🔒 Log in with your department account to add or edit events</div>
+        <% } %>
+      <% } %>
+    </div>
+
+  <div class="card poster-tools-card">
+    <div class="poster-tools">
+      <span class="poster-label">Calendar poster:</span>
+      <select id="posterScope">
+        <option value="year">Full Year</option>
+        <option value="sem-odd">Odd Sem (Jul–Dec)</option>
+        <option value="sem-even">Even Sem (Jan–Jun)</option>
+        <% if (canEdit) { %><option value="custom">Custom range&hellip;</option><% } %>
+      </select>
+      <select id="posterYear"></select>
+
+      <% if (canEdit) { %>
+        <span id="customRangeFields" class="custom-range-fields">
+          <span class="crf-group">From <select id="customFromMonth"></select><select id="customFromYear"></select></span>
+          <span class="crf-group">To <select id="customToMonth"></select><select id="customToYear"></select></span>
+          <input type="text" id="customLabel" placeholder="Label, e.g. Sem 5" maxlength="40">
+        </span>
+      <% } %>
+
+      <button class="btn btn-line" id="downloadPosterBtn">⬇ Download image</button>
+
+      <% if (canEdit) { %>
+        <button class="btn btn-line" id="posterAddEventBtn">+ Add event</button>
+        <button class="btn btn-navy" id="shareBtn">✉ Share by mail</button>
+
+        <hr class="tool-sep">
+        <span class="poster-label">Excel calendar:</span>
+        <select id="excelScope">
+          <option value="month">Monthly Calendar</option>
+          <option value="year">Full-Year Calendar</option>
+        </select>
+        <div class="excel-fields">
+          <select id="excelMonth"></select>
+          <select id="excelYear"></select>
+        </div>
+        <label class="check-row"><input type="checkbox" id="excelList" checked> Include Detailed Event List sheet</label>
+        <% if (canIncludeCentral) { %>
+          <label class="check-row"><input type="checkbox" id="excelCentral"> Include Central events</label>
+        <% } %>
+        <button class="btn btn-navy" id="excelBtn">⬇ Download Excel</button>
+      <% } %>
+    </div>
+  </div>
+
+  </div>
+
+</div>
+
+<footer class="site-footer">
+  <%= calendar.type === 'central' ? calendar.titleLine : calendar.fullName + ' · ' + instituteName %>
+</footer>
+
+<%- include('login') %>
+
+<% if (canEdit) { %>
+<div class="overlay" id="eventOverlay">
+  <div class="modal">
+    <h2 id="eventModalTitle">Add event</h2>
+    <div class="modal-sub" id="eventModalSub">creates a new entry in the Events table</div>
+    <div class="modal-error" id="eventError"></div>
+    <input type="hidden" id="fId">
+    <div class="field">
+      <label for="fSection">Calendar Type</label>
+      <select id="fSection"></select>
+    </div>
+    <div class="field" id="fDepartmentField">
+      <label for="fDepartment">Department</label>
+      <select id="fDepartment"></select>
+    </div>
+    <div class="field">
+      <label for="fTitle">Title</label>
+      <input type="text" id="fTitle" placeholder="e.g. Coding fest" maxlength="255">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="fDate">Date</label>
+        <input type="date" id="fDate">
+      </div>
+      <div class="field">
+        <label for="fTime">Time</label>
+        <input type="text" id="fTime" placeholder="10:00 am" maxlength="50">
+      </div>
+    </div>
+    <div class="field">
+      <label for="fCategory">Category</label>
+      <div class="cat-row">
+        <select id="fCategory"></select>
+        <button type="button" class="btn btn-line" id="addCategoryBtn">+ Add Custom Category</button>
+      </div>
+      <div class="cat-manage" id="catManage" hidden>
+        <button type="button" id="renameCategoryBtn">Rename</button>
+        <button type="button" id="deactivateCategoryBtn">Deactivate</button>
+      </div>
+      <div class="custom-cat-box" id="customCatBox" hidden>
+        <label for="customCatName" id="customCatLabel">Custom Category Name</label>
+        <input type="text" id="customCatName" maxlength="60" autocomplete="off">
+        <div class="inline-error" id="customCatError" hidden></div>
+        <div class="custom-cat-actions">
+          <button type="button" class="btn btn-line" id="customCatCancel">Cancel</button>
+          <button type="button" class="btn btn-navy" id="customCatSave">Save</button>
+        </div>
+      </div>
+    </div>
+    <div class="field" id="fScheduleField" hidden>
+      <label for="fSchedule">Schedule</label>
+      <input type="text" id="fSchedule" readonly>
+    </div>
+    <div class="field" id="fGuestNameField" hidden>
+      <label for="fGuestName">Guest Name</label>
+      <input type="text" id="fGuestName" placeholder="Enter guest name" maxlength="255">
+    </div>
+    <div class="field" id="fMeetingAgendaField" hidden>
+      <label for="fMeetingAgenda">Meeting Details/Agenda</label>
+      <textarea id="fMeetingAgenda" placeholder="Enter meeting details or agenda"></textarea>
+    </div>
+    <div class="field">
+      <label for="fVenue">Venue</label>
+      <input type="text" id="fVenue" placeholder="e.g. CS block lawn" maxlength="255">
+    </div>
+    <div class="field">
+      <label for="fDesc">Description</label>
+      <textarea id="fDesc" placeholder="What's this event about?"></textarea>
+    </div>
+    <div class="field">
+      <label for="fAdditional">Additional Details</label>
+      <textarea id="fAdditional" placeholder="Anything else attendees should know"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-line" id="eventCancelBtn">Cancel</button>
+      <button class="btn btn-navy" id="eventSubmitBtn">Save event</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="shareOverlay">
+  <div class="modal">
+    <h2>Share calendar by email</h2>
+    <div class="modal-sub">generates the poster for the current selection and emails it as a PNG</div>
+    <div class="modal-error" id="shareError"></div>
+    <div class="modal-success" id="shareSuccess">✓ Sent successfully.</div>
+
+    <div class="field">
+      <label>Add recipient</label>
+      <div class="share-add-row">
+        <input type="email" id="shareEmailInput" placeholder="name@vit.edu.in">
+        <button class="btn btn-line" id="shareAddBtn">Add</button>
+        <button class="btn btn-line" id="shareSaveContactBtn" title="Save to mail book">📇 Save</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="share-recipients-head">
+        <label>Sending to</label>
+        <button class="btn-link" id="shareMailBookBtn" type="button">Mail book &rsaquo;</button>
+      </div>
+      <div class="share-chips" id="shareRecipients"></div>
+      <div class="mailbook-list" id="mailBookList"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-line" id="shareCancelBtn">Cancel</button>
+      <button class="btn btn-navy" id="shareSendBtn">Send</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="importOverlay">
+  <div class="modal modal-wide">
+    <h2>Import Events</h2>
+    <div class="modal-sub" id="importSub">Upload an academic calendar PDF — you'll review everything before anything is saved.</div>
+    <div class="modal-error" id="importError"></div>
+
+    <!-- Step 1: target calendar -->
+    <div id="impStepTarget">
+      <div class="field"><label>Where should these events be imported?</label></div>
+      <div class="opt-list">
+        <label class="opt" id="optCentral"><input type="radio" name="impTarget" value="central"><div><strong>Central Calendar</strong><span>Institute-wide events (shown in blue)</span></div></label>
+        <label class="opt" id="optDept"><input type="radio" name="impTarget" value="department"><div><strong>Department Calendar</strong><span id="optDeptHint">Department events (shown in teal)</span></div></label>
+      </div>
+      <div class="field" id="impDeptField" hidden>
+        <label for="impDept">Department</label>
+        <select id="impDept"></select>
+      </div>
+      <div class="field">
+        <label for="impFile">PDF file</label>
+        <input type="file" id="impFile" accept="application/pdf,.pdf">
+        <div class="hint">Works best with calendars that list a date next to each event, one per line or row. Scanned/image-only PDFs aren't supported. Max 10MB.</div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-line" id="impCancelBtn">Cancel</button>
+        <button class="btn btn-navy" id="impExtractBtn">Preview import</button>
+      </div>
+    </div>
+
+    <!-- Step 2: preview -->
+    <div id="impStepPreview" hidden>
+      <div class="target-banner" id="impBanner"></div>
+      <div class="stat-row" id="impStats"></div>
+      <div class="map-box" id="impMapBox" hidden></div>
+      <div class="pdf-row-list" id="impRows"></div>
+      <div class="modal-actions">
+        <button class="btn btn-line" id="impBackBtn">Cancel import</button>
+        <button class="btn btn-navy" id="impConfirmBtn">Confirm import</button>
+      </div>
+    </div>
+
+    <!-- Step 3: result -->
+    <div id="impStepResult" hidden>
+      <div class="pdf-summary" id="impResultSummary"></div>
+      <div class="pdf-row-list" id="impResultList"></div>
+      <div class="modal-actions"><button class="btn btn-navy btn-block" id="impDoneBtn">Done</button></div>
+    </div>
+  </div>
+</div>
+<% } %>
+
+<script>
+  window.__CAL_STATE__ = <%- JSON.stringify(state).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %>;
+</script>
+
+<div id="posterRoot" aria-hidden="true"></div>
+
+<script src="/script.js"></script>
+</body>
+</html>

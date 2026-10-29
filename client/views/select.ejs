@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Select department · <%= instituteName %></title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="masthead">
+  <div class="brand">
+    <div class="crest"><img src="/logo.jpg" alt="VIT Logo"></div>
+    <div>
+      <h1><%= instituteName %></h1>
+      <div class="dept">Academic Calendar</div>
+    </div>
+  </div>
+  <% if (user) { %>
+    <div class="actions"><div class="admin-badge"><span class="dot"></span>Signed in as <%= user.username %></div></div>
+  <% } %>
+</header>
+<% if (flash) { %><div class="flash"><%= flash %></div><% } %>
+
+<main class="select-wrap">
+  <h2>Choose a department calendar</h2>
+  <p class="lead">Select a department to browse its academic events. You can view calendars without signing in; staff sign-in is only needed to add or change events.</p>
+  <% if (last) { %>
+    <a class="resume" href="<%= last.base %>">&rarr; Continue to <%= last.type === 'central' ? 'Central Academic Calendar' : last.shortName %></a>
+  <% } %>
+
+  <div class="dept-grid">
+    <% departments.forEach(function(d) { %>
+      <a class="dept-card" href="/d/<%= d.slug %>">
+        <span class="abbr"><%= d.shortName %></span>
+        <div class="full"><%= d.fullName %></div>
+      </a>
+    <% }); %>
+  </div>
+
+  <div class="select-sep">Institute-wide</div>
+  <div class="dept-grid">
+    <a class="dept-card central" href="/central">
+      <span class="abbr">Central</span>
+      <div class="full"><%= centralHeading %></div>
+    </a>
+  </div>
+</main>
+
+<footer class="site-footer"><%= instituteName %></footer>
+</body>
+</html>

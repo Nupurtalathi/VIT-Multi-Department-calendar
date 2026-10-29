@@ -1,0 +1,19 @@
+<div class="overlay" id="loginOverlay">
+  <div class="modal">
+    <h2>Staff log in</h2>
+    <div class="modal-sub">Sign in with your account for <%= calendar.fullName %></div>
+    <div class="modal-error" id="loginError">Incorrect username or password.</div>
+    <div class="field">
+      <label for="loginUser">Username</label>
+      <input type="text" id="loginUser" autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="loginPass">Password</label>
+      <input type="password" id="loginPass" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-line" id="loginCancelBtn">Cancel</button>
+      <button class="btn btn-navy" id="loginSubmitBtn">Log in</button>
+    </div>
+  </div>
+</div>

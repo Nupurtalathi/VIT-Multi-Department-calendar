@@ -1,0 +1,26 @@
+{
+  "name": "vit-cse-ai-dept-calendar",
+  "version": "2.0.0",
+  "description": "Vishwakarma Institute of Technology - multi-department academic calendar (5 departments + Central).",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node --watch server/server.js",
+    "users": "node scripts/manage-users.js",
+    "test:acceptance": "node scripts/acceptance-test.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^16.6.1",
+    "ejs": "^3.1.10",
+    "exceljs": "^4.4.0",
+    "express": "^4.22.2",
+    "express-session": "^1.19.0",
+    "method-override": "^3.0.0",
+    "multer": "^2.0.0",
+    "mysql2": "^3.23.4",
+    "nodemailer": "^6.9.16",
+    "pdfjs-dist": "^4.2.67"
+  }
+}
