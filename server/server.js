@@ -36,7 +36,7 @@ const { buildWorkbook, MONTH_NAMES } = require('./excel');
 // ---------------------------------------------------------------------------
 
 const isProd = process.env.NODE_ENV === 'production';
-const DEFAULT_SESSION_SECRET = 'vit-cse-ai-dept-secret-change-me';
+const DEFAULT_SESSION_SECRET = 'vit-calendar-development-secret-change-this';
 
 const config = {
   port: process.env.PORT || 3000,
@@ -1547,12 +1547,16 @@ app.post('/api/auth/login', asyncRoute(async (req, res) => {
   }
   clearFailures(req, username);
   const selected = req.session.selectedCalendar;
-  req.session.regenerate((err) => { // fresh session id on privilege change (prevents session fixation)
-    if (err) return sendError(res, err);
-    req.session.userId = user.id;
-    if (selected) req.session.selectedCalendar = selected;
-    homeCalendarFor(user).then((home) => res.json({ success: true, user, redirect: target ? target.base : (home ? home.base : '/') }));
+  await new Promise((resolve, reject) => {
+    req.session.regenerate((err) => err ? reject(err) : resolve());
   });
+  req.session.userId = user.id;
+  if (selected) req.session.selectedCalendar = selected;
+  const home = await homeCalendarFor(user);
+  await new Promise((resolve, reject) => {
+    req.session.save((err) => err ? reject(err) : resolve());
+  });
+  res.json({ success: true, user, redirect: target ? target.base : (home ? home.base : '/') });
 }));
 
 app.post('/api/auth/logout', (req, res) => {
